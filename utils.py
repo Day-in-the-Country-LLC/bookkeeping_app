@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+import re
 
 
 def load_statements():
@@ -30,11 +31,19 @@ def load_existing_table(path="data/output_table.csv"):
     """Return the existing categorized transactions table, if it exists."""
 
     try:
-        return pd.read_csv(path)
+        df = pd.read_csv(path)
     except FileNotFoundError:
-        return pd.DataFrame(
+        df = pd.DataFrame(
             columns=["payee", "date", "amount", "note", "category"]
         )
+
+    # Ensure the normalized_payee column exists for downstream grouping
+    if "payee" in df.columns:
+        df["normalized_payee"] = df["payee"].apply(normalize_payee)
+    else:
+        df["normalized_payee"] = ""
+
+    return df
 
 
 def normalize_bank_data(df):
@@ -62,4 +71,37 @@ def normalize_bank_data(df):
     df = df.dropna(subset=["date", "payee", "amount"])
 
     return df
+
+
+AGGREGATOR_KEYWORDS = ["PAYPAL", "VENMO", "CASH APP", "ZELLE"]
+
+
+def normalize_payee(payee: str) -> str:
+    """Return a normalized version of a payee string for grouping.
+
+    This strips trailing dates and attempts to extract the underlying vendor
+    from aggregator services (e.g., PayPal) so we can reuse categories across
+    statements.
+    """
+
+    if not isinstance(payee, str):
+        return payee
+
+    payee = payee.upper()
+
+    # Remove trailing dates like MM/DD for grouping
+    payee_no_date = re.sub(r"\s+\d{2}/\d{2}$", "", payee)
+
+    # Attempt to extract vendor from aggregator services before collapsing spaces
+    for keyword in AGGREGATOR_KEYWORDS:
+        if payee_no_date.startswith(keyword):
+            parts = re.split(r"\s{2,}", payee)
+            if len(parts) >= 3:
+                candidate = re.sub(r"\s+\d{2}/\d{2}$", "", parts[2])
+                return candidate.strip()
+            return keyword
+
+    # Collapse multiple spaces for general normalization
+    payee_no_date = re.sub(r"\s{2,}", " ", payee_no_date)
+    return payee_no_date.strip()
 
