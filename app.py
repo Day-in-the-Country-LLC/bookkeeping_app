@@ -1,5 +1,5 @@
 import pandas as pd
-from utils import load_existing_table, save_table
+from utils import load_existing_table, save_table, normalize_payee
 from llm import categorize_expense
 
 
@@ -20,6 +20,10 @@ def main(data, account_type="business"):
     existing["date"] = pd.to_datetime(existing["date"], errors="coerce")
     data["date"] = pd.to_datetime(data["date"], errors="coerce")
 
+    # Normalize payee names for smarter grouping
+    existing["normalized_payee"] = existing["payee"].apply(normalize_payee)
+    data["normalized_payee"] = data["payee"].apply(normalize_payee)
+
     # Mark each row with a composite key so we don’t re-insert duplicates
     existing["transaction_key"] = existing.apply(
         lambda r: f"{r['payee']}|{r['date']}|{r['amount']}", axis=1
@@ -33,9 +37,10 @@ def main(data, account_type="business"):
 
     print(f"{len(unprocessed_data)} new transactions need categorization.\n")
 
-    # Group new transactions by payee so we categorize once per payee
-    for payee, group in unprocessed_data.groupby("payee"):
-        payee_history = existing[existing["payee"] == payee]
+    # Group new transactions by normalized payee so we categorize once per vendor
+    for payee, group in unprocessed_data.groupby("normalized_payee"):
+        payee_history = existing[existing["normalized_payee"] == payee]
+        display_payee = group.iloc[0]["payee"]
         used_categories = payee_history["category"].dropna().unique()
 
         # Determine the default category for this payee based on account type
@@ -45,13 +50,13 @@ def main(data, account_type="business"):
         else:
             if len(used_categories) == 0:
                 # Brand new payee, let the model classify
-                print(f"🆕 New payee: '{payee}'")
+                print(f"🆕 New payee: '{display_payee}'")
                 note = input("Describe the expense in plain English: ")
-                default_category = categorize_expense(payee, group["amount"].mean(), note)
+                default_category = categorize_expense(display_payee, group["amount"].mean(), note)
                 default_note = note
             elif len(used_categories) == 1:
                 auto_cat = used_categories[0]
-                print(f"Previously, '{payee}' was always categorized as '{auto_cat}'")
+                print(f"Previously, '{display_payee}' was always categorized as '{auto_cat}'")
                 choice = input("[y] Reuse category, [n] new LLM, or [p] personal? ").strip().lower()
                 if choice == "y":
                     cat_rows = payee_history[payee_history["category"] == auto_cat]
@@ -63,10 +68,10 @@ def main(data, account_type="business"):
                     default_note = "Personal expense"
                 else:
                     note = input("Describe the expense in plain English: ")
-                    default_category = categorize_expense(payee, group["amount"].mean(), note)
+                    default_category = categorize_expense(display_payee, group["amount"].mean(), note)
                     default_note = note
             else:
-                print(f"\nWe’ve seen multiple categories for '{payee}' in the past:")
+                print(f"\nWe’ve seen multiple categories for '{display_payee}' in the past:")
                 for i, cat in enumerate(used_categories):
                     print(f"{i}. {cat}")
                 choice = input(
@@ -82,14 +87,14 @@ def main(data, account_type="business"):
                         default_note = last_note if pd.notna(last_note) else ""
                     else:
                         note = input("Describe the expense in plain English: ")
-                        default_category = categorize_expense(payee, group["amount"].mean(), note)
+                        default_category = categorize_expense(display_payee, group["amount"].mean(), note)
                         default_note = note
                 elif choice == "p":
                     default_category = "PERSONAL"
                     default_note = "Personal expense"
                 else:
                     note = input("Describe the expense in plain English: ")
-                    default_category = categorize_expense(payee, group["amount"].mean(), note)
+                    default_category = categorize_expense(display_payee, group["amount"].mean(), note)
                     default_note = note
 
         # Combine historical and new amounts to detect outliers
@@ -109,7 +114,7 @@ def main(data, account_type="business"):
 
             if is_outlier:
                 print(
-                    f"⚠️ Unusual amount for {payee}: ${amount:.2f} (mean ${mean_amount:.2f})"
+                    f"⚠️ Unusual amount for {display_payee}: ${amount:.2f} (mean ${mean_amount:.2f})"
                 )
                 note = input(
                     "Describe this transaction, or prefix with 'p ' for personal: "
@@ -118,13 +123,14 @@ def main(data, account_type="business"):
                     category = "PERSONAL"
                     note = note[2:].strip()
                 else:
-                    category = categorize_expense(payee, amount, note)
+                    category = categorize_expense(display_payee, amount, note)
             else:
                 category = default_category
                 note = default_note
 
             new_row = {
-                "payee": payee,
+                "payee": row["payee"],
+                "normalized_payee": payee,
                 "date": date,
                 "amount": amount,
                 "note": note,
@@ -133,5 +139,5 @@ def main(data, account_type="business"):
             existing = pd.concat([existing, pd.DataFrame([new_row])], ignore_index=True)
             save_table(existing)
             print(
-                f"✅ Saved: {payee} [{category}] on {date.date()} => ${amount:.2f}\n"
+                f"✅ Saved: {row['payee']} [{category}] on {date.date()} => ${amount:.2f}\n"
             )
