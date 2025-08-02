@@ -1,7 +1,13 @@
+"""Helpers for classifying bookkeeping transactions with OpenAI."""
+
+import os
 from openai import OpenAI
 
-# Instantiate the OpenAI client with your API key
-client = OpenAI(api_key="YOUR_OPENAI_API_KEY")
+
+# Instantiate the OpenAI client with the user's API key from the environment.
+# Reading the key from an environment variable makes the script easier to run
+# without modifying the source code.
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
 # Some example pairs: (note, bookkeeping category)
 EXAMPLES = [
@@ -12,43 +18,44 @@ EXAMPLES = [
     ("Description: Uber LTD. Amount: 50.00. Note: Ridde to airport for TikTok training.", "Travel"),
 ]
 
-def categorize_expense(description: str, amt: str, note: str) -> str:
-    """
-    Use the new 'responses' style API call to assign a bookkeeping category.
+def categorize_expense(description: str, amount: float, note: str) -> str:
+    """Return a bookkeeping category for the given transaction.
+
+    Parameters
+    ----------
+    description:
+        Short description of the payee or transaction.
+    amount:
+        Monetary amount of the transaction.
+    note:
+        Free-form note provided by the user.
     """
 
-    # We'll build a conversation of role/content objects
-    # "developer" seems analogous to a system-level instruction in your snippet
+    # We'll build a conversation of role/content objects. "developer" acts like a
+    # system-level instruction.
     messages = [{
         "role": "developer",
         "content": (
             "You are a helpful bookkeeper that assigns categories to business expenses. "
             "Respond ONLY with the best-fitting category name."
-        )
+        ),
     }]
 
     # Provide few-shot examples as user + assistant pairs
     for ex_note, ex_cat in EXAMPLES:
-        messages.append({
-            "role": "user",
-            "content": f"Note: {ex_note}"
-        })
-        messages.append({
-            "role": "assistant",
-            "content": ex_cat
-        })
+        messages.append({"role": "user", "content": ex_note})
+        messages.append({"role": "assistant", "content": ex_cat})
 
-    # Then your new user query: "Note: <whatever>"
-    messages.append({
-        "role": "user",
-        "content": f"Description: {description}. Amount: {amount}. Note: {note}"
-    })
+    # Then add the user's transaction
+    messages.append(
+        {
+            "role": "user",
+            "content": f"Description: {description}. Amount: {amount}. Note: {note}",
+        }
+    )
 
     # Call the new 'responses' API
-    response = client.responses.create(
-        model="gpt-4o",  # or whichever model name is supported
-        input=messages
-    )
+    response = client.responses.create(model="gpt-4o", input=messages)
 
     # 'response.output_text' should contain the model's final reply
     return response.output_text.strip()
