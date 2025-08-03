@@ -38,6 +38,7 @@ EXAMPLES = [
     ),
 ]
 
+
 def categorize_expense(description: str, amount: float, note: str) -> str:
     """Return a bookkeeping category for the given transaction.
 
@@ -53,13 +54,15 @@ def categorize_expense(description: str, amount: float, note: str) -> str:
 
     # We'll build a conversation of role/content objects. "developer" acts like a
     # system-level instruction.
-    messages = [{
-        "role": "developer",
-        "content": (
-            "You are a helpful bookkeeper that assigns categories to business expenses. "
-            "Respond ONLY with the best-fitting category name."
-        ),
-    }]
+    messages = [
+        {
+            "role": "developer",
+            "content": (
+                "You are a helpful bookkeeper that assigns categories to business expenses. "
+                "Respond ONLY with the best-fitting category name."
+            ),
+        }
+    ]
 
     # Provide few-shot examples as user + assistant pairs
     for ex_note, ex_cat in EXAMPLES:
@@ -76,9 +79,7 @@ def categorize_expense(description: str, amount: float, note: str) -> str:
 
     # Call the 'responses' API. The ``o3`` model is deterministic and does
     # not accept a ``temperature`` parameter.
-    response = client.responses.create(
-        model="o3", input=messages
-    )
+    response = client.responses.create(model="o3", input=messages)
 
     # 'response.output_text' should contain the model's final reply
     return response.output_text.strip()
@@ -122,11 +123,6 @@ def normalize_payees(payees: list[str]) -> dict[str, str]:
         return {p: p for p in payees}
 
 
-# import openai
-
-# # Replace with your own API key or set this as an environment variable
-# openai.api_key = "YOUR_OPENAI_API_KEY"
-
 # EXAMPLES = [
 #     ("Coffee with client at Starbucks", "Meals & Entertainment"),
 #     ("Office rent for March", "Office Expenses"),
@@ -134,27 +130,3 @@ def normalize_payees(payees: list[str]) -> dict[str, str]:
 #     ("Monthly internet bill", "Utilities"),
 #     ("Uber ride to airport", "Travel"),
 # ]
-
-# def categorize_expense(note):
-#     messages = [
-#         {
-#             "role": "system",
-#             "content": "You are a helpful bookkeeper that assigns accounting categories to business expenses."
-#         }
-#     ]
-#     # Provide few-shot examples
-#     for ex_note, ex_cat in EXAMPLES:
-#         messages.append({"role": "user", "content": f"Note: {ex_note}"})
-#         messages.append({"role": "assistant", "content": ex_cat})
-
-#     # Finally, add the user's current request
-#     messages.append({"role": "user", "content": f"Note: {note}"})
-
-#     # Call the ChatCompletion API
-#     response = openai.ChatCompletion.create(
-#         model="gpt-4",
-#         messages=messages,
-#         temperature=0
-#     )
-
-#     return response.choices[0].message.content.strip()
