@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import json
+import pandas as pd
 import utils
 from llm import categorize_expense, normalize_payees
 
@@ -67,3 +68,34 @@ def test_llm_normalizes_payees(monkeypatch):
     assert result[payee1] == "AMZN DIGITAL"
     assert result[payee2] == "AMZN DIGITAL"
     assert calls.get("called")
+
+
+def test_propagate_vendor_info():
+    df = pd.DataFrame(
+        {
+            "payee": ["A", "A", "B"],
+            "normalized_payee": ["A", "A", "B"],
+            "date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+            "amount": [1, 2, 3],
+            "note": ["", "", ""],
+            "category": ["", "", ""],
+        }
+    )
+    updated = utils.propagate_vendor_info(df, "A", "Coffee", "Meals")
+    assert (updated.loc[updated["normalized_payee"] == "A", "note"] == "Coffee").all()
+    assert (updated.loc[updated["normalized_payee"] == "A", "category"] == "Meals").all()
+    assert updated.loc[updated["normalized_payee"] == "B", "note"].iloc[0] == ""
+
+
+def test_generate_summary():
+    df = pd.DataFrame(
+        {
+            "category": ["Meals", "Meals", "Office"],
+            "amount": [10, 20, 30],
+        }
+    )
+    summary = utils.generate_summary(df)
+    meals_total = summary.loc[summary["category"] == "Meals", "total_amount"].iloc[0]
+    office_total = summary.loc[summary["category"] == "Office", "total_amount"].iloc[0]
+    assert meals_total == 30
+    assert office_total == 30
