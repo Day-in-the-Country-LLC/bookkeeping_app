@@ -28,6 +28,11 @@ def test_godaddy_normalization():
     assert utils.normalize_payee(payee1) == utils.normalize_payee(payee2) == 'DNH*GODADDY AZ'
 
 
+def test_adobe_phone_normalization():
+    payee = 'ADOBE  *800-833-6687 800-833-6687 CA         02/10'
+    assert utils.normalize_payee(payee) == 'ADOBE'
+
+
 class DummyResponse:
     def __init__(self, text):
         self.output_text = text
