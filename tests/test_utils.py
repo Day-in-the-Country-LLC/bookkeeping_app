@@ -4,6 +4,12 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import json
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+import json
 import pandas as pd
 import utils
 from llm import categorize_expense, normalize_payees
@@ -30,7 +36,7 @@ class DummyResponse:
 def test_llm_called_for_r_and_d(monkeypatch):
     calls = {}
 
-    def fake_create(model, input, temperature=None, seed=None):
+    def fake_create(model, input, temperature=None):
         assert model == "o3"
 
         calls["called"] = True
@@ -81,7 +87,7 @@ def test_llm_normalizes_payees(monkeypatch):
 def test_categorize_expense_deterministic(monkeypatch):
     counter = {"n": 0}
 
-    def fake_create(model, input, temperature=None, seed=None):
+    def fake_create(model, input, temperature=None):
         assert model == "o3"
         if temperature == 0:
             return DummyResponse("Meals & Entertainment")
@@ -108,7 +114,9 @@ def test_propagate_vendor_info():
             "category": ["", "", ""],
         }
     )
-    updated = utils.propagate_vendor_info(df, "A", "Coffee", "Meals")
+    updated = utils.propagate_vendor_info(
+        df, "A", "Coffee", "Meals", amount_range=(0, 2)
+    )
     assert (updated.loc[updated["normalized_payee"] == "A", "note"] == "Coffee").all()
     assert (updated.loc[updated["normalized_payee"] == "A", "category"] == "Meals").all()
     assert updated.loc[updated["normalized_payee"] == "B", "note"].iloc[0] == ""

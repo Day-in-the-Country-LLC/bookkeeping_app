@@ -2,7 +2,6 @@ import pandas as pd
 from utils import (
     load_existing_table,
     save_table,
-    normalize_payee,
     confirm_category,
     save_summary_table,
     propagate_vendor_info,
@@ -16,14 +15,15 @@ def main(data, account_type: str | None = None):
     This function walks through the following flow:
 
     1. Load existing categorized transactions.
-    2. Normalize payees using both string heuristics and an LLM so that
-       transactions from the same vendor are grouped together.
-    3. For each normalized payee appearing in the new data, ask the user to
+    2. Group transactions by raw payee name and use an LLM to collapse variants
+       down to canonical vendors.
+    3. For each normalized payee appearing in the new data, further break down
+       transactions by significant payment amount clusters and ask the user to
        describe the expense.
     4. Use that description to suggest a bookkeeping category which the user can
        confirm or override.
     5. Record the note and category for all transactions belonging to that
-       vendor.
+       vendor cluster.
     6. After all transactions have been categorized, aggregate totals by
        category for downstream reporting.
 
@@ -42,11 +42,11 @@ def main(data, account_type: str | None = None):
     existing["date"] = pd.to_datetime(existing["date"], errors="coerce")
     data["date"] = pd.to_datetime(data["date"], errors="coerce")
 
-    # First pass normalization using regex/string rules
-    existing["normalized_payee"] = existing["payee"].apply(normalize_payee)
-    data["normalized_payee"] = data["payee"].apply(normalize_payee)
+    # Group by raw payee names first, then use the LLM to collapse similar
+    # payees down to canonical vendors.
+    existing["normalized_payee"] = existing["payee"]
+    data["normalized_payee"] = data["payee"]
 
-    # Use the LLM to collapse similar payees across existing and new data
     all_payees = pd.concat(
         [existing["normalized_payee"], data["normalized_payee"]]
     ).dropna().unique().tolist()
@@ -66,23 +66,53 @@ def main(data, account_type: str | None = None):
 
     print(f"{len(unprocessed_data)} new transactions need categorization.\n")
 
-    # Prompt once per normalized vendor
+    def split_amount_clusters(group: pd.DataFrame, ratio: float = 3.0) -> list[pd.DataFrame]:
+        """Break a vendor's transactions into clusters by amount.
+
+        Amounts within ``ratio`` of each other are grouped together. This helps
+        surface multiple services from the same vendor and outliers that should
+        be categorized separately.
+        """
+
+        unique_amounts = sorted(group["amount"].abs().unique())
+        if not unique_amounts:
+            return [group]
+        clusters: list[list[float]] = [[unique_amounts[0]]]
+        for amt in unique_amounts[1:]:
+            if amt / clusters[-1][0] <= ratio:
+                clusters[-1].append(amt)
+            else:
+                clusters.append([amt])
+        return [group[group["amount"].abs().isin(c)] for c in clusters]
+
+    # Prompt once per normalized vendor and amount cluster
     for payee, group in unprocessed_data.groupby("normalized_payee"):
-        display_payee = group.iloc[0]["payee"]
-        print(f"\nProcessing '{display_payee}' ({len(group)} transactions)")
-        note = input("Describe the expense: ")
+        for sub in split_amount_clusters(group):
+            display_payee = sub.iloc[0]["payee"]
+            print(f"\nProcessing '{display_payee}' ({len(sub)} transactions)")
 
-        category = categorize_expense(display_payee, group["amount"].mean(), note)
-        category = confirm_category(category)
+            # Show payment statistics before requesting a description
+            counts = sub["amount"].value_counts().sort_index()
+            print("Payment summary:")
+            for amt, count in counts.items():
+                print(f"  {count} payment(s) of ${amt:.2f}")
 
-        # Apply the note/category to all transactions in the group
-        group = group.assign(note=note, category=category)
-        existing = pd.concat([existing, group], ignore_index=True)
-        existing = propagate_vendor_info(existing, payee, note, category)
-        save_table(existing, account_type=account_type)
-        print(
-            f"✅ Saved {len(group)} transaction(s) for '{display_payee}' as '{category}'"
-        )
+            note = input("Describe the expense: ")
+
+            category = categorize_expense(display_payee, sub["amount"].mean(), note)
+            category = confirm_category(category)
+
+            # Apply the note/category to all transactions in the cluster
+            sub = sub.assign(note=note, category=category)
+            existing = pd.concat([existing, sub], ignore_index=True)
+            amount_range = (sub["amount"].min(), sub["amount"].max())
+            existing = propagate_vendor_info(
+                existing, payee, note, category, amount_range
+            )
+            save_table(existing, account_type=account_type)
+            print(
+                f"✅ Saved {len(sub)} transaction(s) for '{display_payee}' as '{category}'"
+            )
 
     # Once everything is categorized, update the summary table
     save_summary_table(existing, account_type=account_type)
