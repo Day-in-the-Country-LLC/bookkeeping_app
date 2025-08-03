@@ -133,6 +133,11 @@ def normalize_payee(payee: str) -> str:
     # Remove trailing dates like MM/DD for grouping
     payee_no_date = re.sub(r"\s+\d{2}/\d{2}$", "", payee)
 
+    # If a phone number immediately follows a '*' token, strip everything after the star
+    star_phone = re.match(r"^(.*)\*\d{3}-\d{3}-\d{4}", payee_no_date)
+    if star_phone:
+        return star_phone.group(1).strip()
+
     # Attempt to extract vendor from aggregator services before collapsing spaces
     for keyword in AGGREGATOR_KEYWORDS:
         if payee_no_date.startswith(keyword):
@@ -146,10 +151,12 @@ def normalize_payee(payee: str) -> str:
     if payee_no_date.startswith(("AMZN DIGITAL", "AMAZON DIGITAL")):
         return "AMZN DIGITAL"
 
-    # Remove ticket numbers, long digit sequences, and phone numbers
+    # Remove ticket numbers, long digit sequences, stray '*' tokens, and phone numbers
     payee_no_date = re.sub(r"#\d+", "", payee_no_date)
     payee_no_date = re.sub(r"\b\d{3}-\d{7}\b", "", payee_no_date)
+    payee_no_date = re.sub(r"\b\d{3}-\d{3}-\d{4}\b", "", payee_no_date)
     payee_no_date = re.sub(r"\b\d{5,}\b", "", payee_no_date)
+    payee_no_date = re.sub(r"(?<=\s)\*(?=\s|$)", " ", payee_no_date)
 
     # Collapse multiple spaces and trim
     payee_no_date = re.sub(r"\s{2,}", " ", payee_no_date)
