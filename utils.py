@@ -72,11 +72,14 @@ def load_existing_table(path: str | None = None, account_type: str | None = None
             columns=["payee", "date", "amount", "note", "category"]
         )
 
-    # Ensure the normalized_payee column exists for downstream grouping
+    # Ensure the normalized_payee column exists for downstream grouping.
+    # We start by grouping on the raw payee names and then use the LLM to
+    # collapse any variants down to a canonical vendor.
     if "payee" in df.columns:
-        df["normalized_payee"] = df["payee"].apply(normalize_payee)
-        # Use the LLM to further collapse payee variants across the table
-        mapping = llm_normalize_payees(df["normalized_payee"].unique().tolist())
+        df["normalized_payee"] = df["payee"]
+        mapping = llm_normalize_payees(
+            df["normalized_payee"].dropna().unique().tolist()
+        )
         df["normalized_payee"] = df["normalized_payee"].replace(mapping)
     else:
         df["normalized_payee"] = ""
@@ -162,7 +165,13 @@ def confirm_category(suggested: str) -> str:
     return override or suggested
 
 
-def propagate_vendor_info(df: pd.DataFrame, normalized_payee: str, note: str, category: str) -> pd.DataFrame:
+def propagate_vendor_info(
+    df: pd.DataFrame,
+    normalized_payee: str,
+    note: str,
+    category: str,
+    amount_range: tuple[float, float] | None = None,
+) -> pd.DataFrame:
     """Fill note and category for all transactions matching a vendor.
 
     Parameters
@@ -175,6 +184,10 @@ def propagate_vendor_info(df: pd.DataFrame, normalized_payee: str, note: str, ca
         User supplied description of the vendor.
     category:
         Bookkeeping category associated with the vendor.
+    amount_range:
+        Optional ``(min, max)`` tuple limiting propagation to transactions whose
+        amounts fall within the given range. This helps keep distinct services
+        from the same vendor separate.
 
     Returns
     -------
@@ -183,6 +196,9 @@ def propagate_vendor_info(df: pd.DataFrame, normalized_payee: str, note: str, ca
     """
 
     mask = df["normalized_payee"] == normalized_payee
+    if amount_range is not None:
+        low, high = amount_range
+        mask &= df["amount"].between(low, high)
     if mask.any():
         df.loc[mask, ["note", "category"]] = [note, category]
     return df
