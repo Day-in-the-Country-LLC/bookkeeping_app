@@ -122,3 +122,47 @@ def confirm_category(suggested: str) -> str:
     ).strip()
     return override or suggested
 
+
+def propagate_vendor_info(df: pd.DataFrame, normalized_payee: str, note: str, category: str) -> pd.DataFrame:
+    """Fill note and category for all transactions matching a vendor.
+
+    Parameters
+    ----------
+    df:
+        Transaction table to update.
+    normalized_payee:
+        Canonical vendor key produced by ``normalize_payee``.
+    note:
+        User supplied description of the vendor.
+    category:
+        Bookkeeping category associated with the vendor.
+
+    Returns
+    -------
+    DataFrame
+        Updated transaction table.
+    """
+
+    mask = df["normalized_payee"] == normalized_payee
+    if mask.any():
+        df.loc[mask, ["note", "category"]] = [note, category]
+    return df
+
+
+def generate_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Return aggregate totals by category for tax preparation."""
+
+    if df.empty:
+        return pd.DataFrame(columns=["category", "total_amount"])
+
+    summary = df.groupby("category", dropna=False)["amount"].sum().reset_index()
+    summary.rename(columns={"amount": "total_amount"}, inplace=True)
+    return summary
+
+
+def save_summary_table(df: pd.DataFrame, path: str = "data/category_summary.csv") -> None:
+    """Persist aggregate category totals to disk for a tax preparer."""
+
+    summary = generate_summary(df)
+    summary.to_csv(path, index=False)
+
