@@ -22,14 +22,48 @@ def load_statements():
     return None
 
 
-def save_table(df, path="data/output_table.csv"):
-    """Persist the categorized transactions to disk."""
+def save_table(df, path: str | None = None, account_type: str | None = None):
+    """Persist the categorized transactions to disk.
+
+    Parameters
+    ----------
+    df:
+        Table of categorized transactions.
+    path:
+        Optional explicit path to write the table to.
+    account_type:
+        When ``path`` is not provided, use this to select a file name scoped
+        to a specific account type (e.g., ``business`` or ``personal``).
+    """
+
+    if path is None:
+        suffix = "output_table.csv"
+        if account_type:
+            path = f"data/{account_type}_{suffix}"
+        else:
+            path = f"data/{suffix}"
 
     df.to_csv(path, index=False)
 
 
-def load_existing_table(path="data/output_table.csv"):
-    """Return the existing categorized transactions table, if it exists."""
+def load_existing_table(path: str | None = None, account_type: str | None = None):
+    """Return the existing categorized transactions table, if it exists.
+
+    Parameters
+    ----------
+    path:
+        Optional explicit path to read from.
+    account_type:
+        When ``path`` is not provided, use this to select a file name scoped
+        to a specific account type (e.g., ``business`` or ``personal``).
+    """
+
+    if path is None:
+        suffix = "output_table.csv"
+        if account_type:
+            path = f"data/{account_type}_{suffix}"
+        else:
+            path = f"data/{suffix}"
 
     try:
         df = pd.read_csv(path)
@@ -160,8 +194,30 @@ def generate_summary(df: pd.DataFrame) -> pd.DataFrame:
     return summary
 
 
-def save_summary_table(df: pd.DataFrame, path: str = "data/category_summary.csv") -> None:
-    """Persist aggregate category totals to disk for a tax preparer."""
+def save_summary_table(
+    df: pd.DataFrame,
+    path: str | None = None,
+    account_type: str | None = None,
+) -> None:
+    """Persist aggregate category totals to disk for a tax preparer.
+
+    Parameters
+    ----------
+    df:
+        Categorized transaction table.
+    path:
+        Optional explicit path to write the summary to.
+    account_type:
+        When ``path`` is not provided, use this to select a file name scoped to
+        a specific account type (e.g., ``business`` or ``personal``).
+    """
+
+    if path is None:
+        suffix = "category_summary.csv"
+        if account_type:
+            path = f"data/{account_type}_{suffix}"
+        else:
+            path = f"data/{suffix}"
 
     summary = generate_summary(df)
     summary.to_csv(path, index=False)
