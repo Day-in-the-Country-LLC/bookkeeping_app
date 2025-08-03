@@ -41,8 +41,9 @@ class DummyResponse:
 def test_llm_called_for_r_and_d(monkeypatch):
     calls = {}
 
-    def fake_create(model, input, temperature=None):
+    def fake_create(model, input, **kwargs):
         assert model == "o3"
+        assert "temperature" not in kwargs
 
         calls["called"] = True
         return DummyResponse("Research & Development")
@@ -90,14 +91,10 @@ def test_llm_normalizes_payees(monkeypatch):
 
 
 def test_categorize_expense_deterministic(monkeypatch):
-    counter = {"n": 0}
-
-    def fake_create(model, input, temperature=None):
+    def fake_create(model, input, **kwargs):
         assert model == "o3"
-        if temperature == 0:
-            return DummyResponse("Meals & Entertainment")
-        counter["n"] += 1
-        return DummyResponse(f"Category {counter['n']}")
+        assert "temperature" not in kwargs
+        return DummyResponse("Meals & Entertainment")
 
     monkeypatch.setattr("llm.client.responses.create", fake_create)
 

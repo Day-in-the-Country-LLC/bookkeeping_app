@@ -74,11 +74,10 @@ def categorize_expense(description: str, amount: float, note: str) -> str:
         }
     )
 
-    # Call the new 'responses' API with deterministic settings
-    # The SDK no longer accepts a ``seed`` parameter, but using a temperature
-    # of 0 still provides deterministic responses for the same prompt.
+    # Call the 'responses' API. The ``o3`` model is deterministic and does
+    # not accept a ``temperature`` parameter.
     response = client.responses.create(
-        model="o3", input=messages, temperature=0
+        model="o3", input=messages
     )
 
     # 'response.output_text' should contain the model's final reply
