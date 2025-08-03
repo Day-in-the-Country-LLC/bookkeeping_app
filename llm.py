@@ -74,8 +74,10 @@ def categorize_expense(description: str, amount: float, note: str) -> str:
         }
     )
 
-    # Call the new 'responses' API
-    response = client.responses.create(model="gpt-4o", input=messages)
+    # Call the new 'responses' API with deterministic settings
+    response = client.responses.create(
+        model="o3", input=messages, temperature=0, seed=0
+    )
 
     # 'response.output_text' should contain the model's final reply
     return response.output_text.strip()
@@ -110,7 +112,7 @@ def normalize_payees(payees: list[str]) -> dict[str, str]:
         {"role": "user", "content": "\n".join(payees)},
     ]
 
-    response = client.responses.create(model="gpt-4o", input=messages, temperature=0)
+    response = client.responses.create(model="o3", input=messages)
     text = response.output_text.strip()
     try:
         return json.loads(text)

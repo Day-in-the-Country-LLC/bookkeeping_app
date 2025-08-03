@@ -30,7 +30,9 @@ class DummyResponse:
 def test_llm_called_for_r_and_d(monkeypatch):
     calls = {}
 
-    def fake_create(model, input, temperature=None):
+    def fake_create(model, input, temperature=None, seed=None):
+        assert model == "o3"
+
         calls["called"] = True
         return DummyResponse("Research & Development")
 
@@ -56,20 +58,19 @@ def test_llm_normalizes_payees(monkeypatch):
     payee1 = 'AMZN Digital*GM3C83WE 888-802-3080 WA        09/30'
     payee2 = 'AMZN Digital*K67VZ1R2 888-802-3080 WA        10/30'
 
-    def fake_create(model, input, temperature=None):
-        assert temperature == 0
+    calls = {}
+
+    def fake_create(model, input, **kwargs):
+        assert model == "o3"
+
         mapping = {
             payee1: "AMZN DIGITAL",
             payee2: "AMZN DIGITAL",
         }
+        calls["called"] = True
         return DummyResponse(json.dumps(mapping))
 
-    calls = {}
-    def wrapper(model, input, temperature=None):
-        calls["called"] = True
-        return fake_create(model, input, temperature=temperature)
-
-    monkeypatch.setattr("llm.client.responses.create", wrapper)
+    monkeypatch.setattr("llm.client.responses.create", fake_create)
 
     result = normalize_payees([payee1, payee2])
     assert result[payee1] == "AMZN DIGITAL"
@@ -77,22 +78,22 @@ def test_llm_normalizes_payees(monkeypatch):
     assert calls.get("called")
 
 
-def test_normalize_payees_deterministic(monkeypatch):
-    payees = ["Store A", "Store B"]
+def test_categorize_expense_deterministic(monkeypatch):
+    counter = {"n": 0}
 
-    def fake_create(model, input, temperature=None):
-        fake_create.counter += 1
-        suffix = "" if temperature == 0 else str(fake_create.counter)
-        mapping = {p: f"{p}_CANONICAL{suffix}" for p in payees}
-        return DummyResponse(json.dumps(mapping))
-
-    fake_create.counter = 0
+    def fake_create(model, input, temperature=None, seed=None):
+        assert model == "o3"
+        if temperature == 0:
+            return DummyResponse("Meals & Entertainment")
+        counter["n"] += 1
+        return DummyResponse(f"Category {counter['n']}")
 
     monkeypatch.setattr("llm.client.responses.create", fake_create)
 
-    first = normalize_payees(payees)
-    second = normalize_payees(payees)
+    first = categorize_expense("Starbuchs LTD", 6.18, "Coffee with client")
+    second = categorize_expense("Starbuchs LTD", 6.18, "Coffee with client")
 
+    assert first == "Meals & Entertainment"
     assert first == second
 
 
