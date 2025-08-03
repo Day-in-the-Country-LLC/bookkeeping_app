@@ -110,7 +110,7 @@ def normalize_payees(payees: list[str]) -> dict[str, str]:
         {"role": "user", "content": "\n".join(payees)},
     ]
 
-    response = client.responses.create(model="gpt-4o", input=messages)
+    response = client.responses.create(model="gpt-4o", input=messages, temperature=0)
     text = response.output_text.strip()
     try:
         return json.loads(text)

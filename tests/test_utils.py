@@ -30,7 +30,7 @@ class DummyResponse:
 def test_llm_called_for_r_and_d(monkeypatch):
     calls = {}
 
-    def fake_create(model, input):
+    def fake_create(model, input, temperature=None):
         calls["called"] = True
         return DummyResponse("Research & Development")
 
@@ -56,7 +56,8 @@ def test_llm_normalizes_payees(monkeypatch):
     payee1 = 'AMZN Digital*GM3C83WE 888-802-3080 WA        09/30'
     payee2 = 'AMZN Digital*K67VZ1R2 888-802-3080 WA        10/30'
 
-    def fake_create(model, input):
+    def fake_create(model, input, temperature=None):
+        assert temperature == 0
         mapping = {
             payee1: "AMZN DIGITAL",
             payee2: "AMZN DIGITAL",
@@ -64,9 +65,9 @@ def test_llm_normalizes_payees(monkeypatch):
         return DummyResponse(json.dumps(mapping))
 
     calls = {}
-    def wrapper(model, input):
+    def wrapper(model, input, temperature=None):
         calls["called"] = True
-        return fake_create(model, input)
+        return fake_create(model, input, temperature=temperature)
 
     monkeypatch.setattr("llm.client.responses.create", wrapper)
 
@@ -74,6 +75,25 @@ def test_llm_normalizes_payees(monkeypatch):
     assert result[payee1] == "AMZN DIGITAL"
     assert result[payee2] == "AMZN DIGITAL"
     assert calls.get("called")
+
+
+def test_normalize_payees_deterministic(monkeypatch):
+    payees = ["Store A", "Store B"]
+
+    def fake_create(model, input, temperature=None):
+        fake_create.counter += 1
+        suffix = "" if temperature == 0 else str(fake_create.counter)
+        mapping = {p: f"{p}_CANONICAL{suffix}" for p in payees}
+        return DummyResponse(json.dumps(mapping))
+
+    fake_create.counter = 0
+
+    monkeypatch.setattr("llm.client.responses.create", fake_create)
+
+    first = normalize_payees(payees)
+    second = normalize_payees(payees)
+
+    assert first == second
 
 
 def test_propagate_vendor_info():
