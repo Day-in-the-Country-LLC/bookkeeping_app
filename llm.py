@@ -1,6 +1,7 @@
 """Helpers for classifying bookkeeping transactions with OpenAI."""
 
 import os
+import json
 from openai import OpenAI
 
 
@@ -11,11 +12,30 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
 # Some example pairs: (note, bookkeeping category)
 EXAMPLES = [
-    ("Description: Starbuchs LTD 0817. Amount: 6.18. Note: Coffee with client at Starbucks.", "Meals & Entertainment"),
-    ("Description: Regis Congressional Blvd. Amount: 679.00. Note: Office rent for March.", "Office Expenses"),
-    ("Description: Meta Corporation Marketplace. Amount: 21.55. Note: Facebook ad campaign", "Advertising"),
-    ("Description: AT&T Business. Amount: 70.00. Note: Monthly office internet bill.", "Utilities"),
-    ("Description: Uber LTD. Amount: 50.00. Note: Ridde to airport for TikTok training.", "Travel"),
+    (
+        "Description: Starbuchs LTD 0817. Amount: 6.18. Note: Coffee with client at Starbucks.",
+        "Meals & Entertainment",
+    ),
+    (
+        "Description: Regis Congressional Blvd. Amount: 679.00. Note: Office rent for March.",
+        "Office Expenses",
+    ),
+    (
+        "Description: Meta Corporation Marketplace. Amount: 21.55. Note: Facebook ad campaign",
+        "Advertising",
+    ),
+    (
+        "Description: AT&T Business. Amount: 70.00. Note: Monthly office internet bill.",
+        "Utilities",
+    ),
+    (
+        "Description: Uber LTD. Amount: 50.00. Note: Ridde to airport for TikTok training.",
+        "Travel",
+    ),
+    (
+        "Description: AMZN Digital. Amount: 16.99. Note: Research and dev book.",
+        "Research & Development",
+    ),
 ]
 
 def categorize_expense(description: str, amount: float, note: str) -> str:
@@ -59,6 +79,44 @@ def categorize_expense(description: str, amount: float, note: str) -> str:
 
     # 'response.output_text' should contain the model's final reply
     return response.output_text.strip()
+
+
+def normalize_payees(payees: list[str]) -> dict[str, str]:
+    """Use the LLM to normalize a batch of payee names.
+
+    Parameters
+    ----------
+    payees:
+        List of raw payee strings from bank statements.
+
+    Returns
+    -------
+    dict
+        Mapping of each original payee to a canonical vendor name.
+    """
+
+    if not payees:
+        return {}
+
+    messages = [
+        {
+            "role": "developer",
+            "content": (
+                "You clean merchant names for bookkeeping. Given a list of payees, "
+                "return a JSON object mapping each original payee string to a "
+                "concise canonical vendor name. Respond ONLY with JSON."
+            ),
+        },
+        {"role": "user", "content": "\n".join(payees)},
+    ]
+
+    response = client.responses.create(model="gpt-4o", input=messages)
+    text = response.output_text.strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        # Fallback to identity mapping if parsing fails
+        return {p: p for p in payees}
 
 
 # import openai

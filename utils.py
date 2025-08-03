@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 import re
+from llm import normalize_payees as llm_normalize_payees
 
 
 def load_statements():
@@ -40,6 +41,9 @@ def load_existing_table(path="data/output_table.csv"):
     # Ensure the normalized_payee column exists for downstream grouping
     if "payee" in df.columns:
         df["normalized_payee"] = df["payee"].apply(normalize_payee)
+        # Use the LLM to further collapse payee variants across the table
+        mapping = llm_normalize_payees(df["normalized_payee"].unique().tolist())
+        df["normalized_payee"] = df["normalized_payee"].replace(mapping)
     else:
         df["normalized_payee"] = ""
 
@@ -101,7 +105,20 @@ def normalize_payee(payee: str) -> str:
                 return candidate.strip()
             return keyword
 
+    # Normalize Amazon Digital purchases which include random codes and phone numbers
+    if payee_no_date.startswith(("AMZN DIGITAL", "AMAZON DIGITAL")):
+        return "AMZN DIGITAL"
+
     # Collapse multiple spaces for general normalization
     payee_no_date = re.sub(r"\s{2,}", " ", payee_no_date)
     return payee_no_date.strip()
+
+
+def confirm_category(suggested: str) -> str:
+    """Prompt the user to accept or override a suggested category."""
+
+    override = input(
+        f"Suggested category '{suggested}'. Press enter to accept or type new category: "
+    ).strip()
+    return override or suggested
 
