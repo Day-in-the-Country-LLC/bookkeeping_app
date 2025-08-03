@@ -10,7 +10,7 @@ from utils import (
 from llm import categorize_expense, normalize_payees as llm_normalize_payees
 
 
-def main(data):
+def main(data, account_type: str | None = None):
     """Categorize new transactions and save them to the output table.
 
     This function walks through the following flow:
@@ -31,9 +31,12 @@ def main(data):
     ----------
     data: DataFrame
         New bank transactions to categorize.
+    account_type: str | None, optional
+        If provided, read from and write to tables specific to this account
+        type (e.g., ``business`` or ``personal``).
     """
 
-    existing = load_existing_table()
+    existing = load_existing_table(account_type=account_type)
 
     # Ensure consistent column types
     existing["date"] = pd.to_datetime(existing["date"], errors="coerce")
@@ -76,11 +79,11 @@ def main(data):
         group = group.assign(note=note, category=category)
         existing = pd.concat([existing, group], ignore_index=True)
         existing = propagate_vendor_info(existing, payee, note, category)
-        save_table(existing)
+        save_table(existing, account_type=account_type)
         print(
             f"✅ Saved {len(group)} transaction(s) for '{display_payee}' as '{category}'"
         )
 
     # Once everything is categorized, update the summary table
-    save_summary_table(existing)
+    save_summary_table(existing, account_type=account_type)
 
