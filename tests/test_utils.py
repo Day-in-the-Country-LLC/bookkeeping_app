@@ -16,6 +16,12 @@ def test_amzn_digital_normalization():
     assert utils.normalize_payee(payee2) == 'AMZN DIGITAL'
 
 
+def test_godaddy_normalization():
+    payee1 = 'DNH*GODADDY #1234567 480-5058877 AZ        09/30'
+    payee2 = 'DNH*GODADDY #7654321 800-9876543 AZ        10/30'
+    assert utils.normalize_payee(payee1) == utils.normalize_payee(payee2) == 'DNH*GODADDY AZ'
+
+
 class DummyResponse:
     def __init__(self, text):
         self.output_text = text
@@ -26,6 +32,7 @@ def test_llm_called_for_r_and_d(monkeypatch):
 
     def fake_create(model, input, temperature=None, seed=None):
         assert model == "o3"
+
         calls["called"] = True
         return DummyResponse("Research & Development")
 
@@ -55,6 +62,7 @@ def test_llm_normalizes_payees(monkeypatch):
 
     def fake_create(model, input, **kwargs):
         assert model == "o3"
+
         mapping = {
             payee1: "AMZN DIGITAL",
             payee2: "AMZN DIGITAL",
@@ -118,3 +126,37 @@ def test_generate_summary():
     office_total = summary.loc[summary["category"] == "Office", "total_amount"].iloc[0]
     assert meals_total == 30
     assert office_total == 30
+
+
+def test_account_type_separates_tables(monkeypatch, tmp_path):
+    monkeypatch.setattr(utils, "llm_normalize_payees", lambda payees: {p: p for p in payees})
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+
+    df_business = pd.DataFrame(
+        {
+            "payee": ["BizCo"],
+            "date": pd.to_datetime(["2024-01-01"]),
+            "amount": [100],
+            "note": [""],
+            "category": [""],
+        }
+    )
+    df_personal = pd.DataFrame(
+        {
+            "payee": ["Home"],
+            "date": pd.to_datetime(["2024-02-01"]),
+            "amount": [200],
+            "note": [""],
+            "category": [""],
+        }
+    )
+
+    utils.save_table(df_business, account_type="business")
+    utils.save_table(df_personal, account_type="personal")
+
+    loaded_business = utils.load_existing_table(account_type="business")
+    loaded_personal = utils.load_existing_table(account_type="personal")
+
+    assert loaded_business["payee"].tolist() == ["BizCo"]
+    assert loaded_personal["payee"].tolist() == ["Home"]
