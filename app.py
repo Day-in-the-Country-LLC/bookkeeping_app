@@ -1,5 +1,5 @@
 import pandas as pd
-from utils import load_existing_table, save_table, normalize_payee
+from utils import load_existing_table, save_table, normalize_payee, confirm_category
 from llm import categorize_expense
 
 
@@ -127,6 +127,8 @@ def main(data, account_type="business"):
             else:
                 category = default_category
                 note = default_note
+
+            category = confirm_category(category)
 
             new_row = {
                 "payee": row["payee"],
