@@ -16,6 +16,12 @@ def test_amzn_digital_normalization():
     assert utils.normalize_payee(payee2) == 'AMZN DIGITAL'
 
 
+def test_godaddy_normalization():
+    payee1 = 'DNH*GODADDY #1234567 480-5058877 AZ        09/30'
+    payee2 = 'DNH*GODADDY #7654321 800-9876543 AZ        10/30'
+    assert utils.normalize_payee(payee1) == utils.normalize_payee(payee2) == 'DNH*GODADDY AZ'
+
+
 class DummyResponse:
     def __init__(self, text):
         self.output_text = text
