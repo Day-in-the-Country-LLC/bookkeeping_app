@@ -88,7 +88,7 @@ def main(data, account_type: str | None = None):
     # Prompt once per normalized vendor and amount cluster
     for payee, group in unprocessed_data.groupby("normalized_payee"):
         for sub in split_amount_clusters(group):
-            display_payee = sub.iloc[0]["payee"]
+            display_payee = payee
             print(f"\nProcessing '{display_payee}' ({len(sub)} transactions)")
 
             # Show payment statistics before requesting a description
