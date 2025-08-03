@@ -143,7 +143,12 @@ def normalize_payee(payee: str) -> str:
     if payee_no_date.startswith(("AMZN DIGITAL", "AMAZON DIGITAL")):
         return "AMZN DIGITAL"
 
-    # Collapse multiple spaces for general normalization
+    # Remove ticket numbers, long digit sequences, and phone numbers
+    payee_no_date = re.sub(r"#\d+", "", payee_no_date)
+    payee_no_date = re.sub(r"\b\d{3}-\d{7}\b", "", payee_no_date)
+    payee_no_date = re.sub(r"\b\d{5,}\b", "", payee_no_date)
+
+    # Collapse multiple spaces and trim
     payee_no_date = re.sub(r"\s{2,}", " ", payee_no_date)
     return payee_no_date.strip()
 
