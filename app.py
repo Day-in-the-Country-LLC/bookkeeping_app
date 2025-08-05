@@ -5,6 +5,7 @@ from utils import (
     confirm_category,
     save_summary_table,
     propagate_vendor_info,
+    normalize_payee,
 )
 from llm import categorize_expense, normalize_payees as llm_normalize_payees
 
@@ -42,10 +43,10 @@ def main(data, account_type: str | None = None):
     existing["date"] = pd.to_datetime(existing["date"], errors="coerce")
     data["date"] = pd.to_datetime(data["date"], errors="coerce")
 
-    # Group by raw payee names first, then use the LLM to collapse similar
-    # payees down to canonical vendors.
-    existing["normalized_payee"] = existing["payee"]
-    data["normalized_payee"] = data["payee"]
+    # Group by raw payee names first, clean them up, then use the LLM to
+    # collapse similar payees down to canonical vendors.
+    existing["normalized_payee"] = existing["payee"].apply(normalize_payee)
+    data["normalized_payee"] = data["payee"].apply(normalize_payee)
 
     all_payees = pd.concat(
         [existing["normalized_payee"], data["normalized_payee"]]
@@ -97,10 +98,23 @@ def main(data, account_type: str | None = None):
             for amt, count in counts.items():
                 print(f"  {count} payment(s) of ${amt:.2f}")
 
-            note = input("Describe the expense: ")
-
-            category = categorize_expense(display_payee, sub["amount"].mean(), note)
-            category = confirm_category(category)
+            if account_type == "personal":
+                note = input(
+                    "Describe the expense or press enter if personal: "
+                ).strip()
+                if note:
+                    category = categorize_expense(
+                        display_payee, sub["amount"].mean(), note
+                    )
+                    category = confirm_category(category)
+                else:
+                    category = "Personal"
+            else:
+                note = input("Describe the expense: ").strip()
+                category = categorize_expense(
+                    display_payee, sub["amount"].mean(), note
+                )
+                category = confirm_category(category)
 
             # Apply the note/category to all transactions in the cluster
             sub = sub.assign(note=note, category=category)
