@@ -73,10 +73,10 @@ def load_existing_table(path: str | None = None, account_type: str | None = None
         )
 
     # Ensure the normalized_payee column exists for downstream grouping.
-    # We start by grouping on the raw payee names and then use the LLM to
-    # collapse any variants down to a canonical vendor.
+    # We start by heuristically cleaning the raw payee names and then use the
+    # LLM to collapse any remaining variants down to a canonical vendor.
     if "payee" in df.columns:
-        df["normalized_payee"] = df["payee"]
+        df["normalized_payee"] = df["payee"].apply(normalize_payee)
         mapping = llm_normalize_payees(
             df["normalized_payee"].dropna().unique().tolist()
         )
